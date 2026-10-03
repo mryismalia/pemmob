@@ -248,9 +248,9 @@ Ketentuan aplikasi:
 * Minimal 6 kontak.
 * Setiap kontak memiliki:
 
-  * Nama
-  * Nomor telepon
-  * Email
+    * Nama
+    * Nomor telepon
+    * Email
 * Data disimpan dalam `List` yang berisi objek dari sebuah class.
 * Halaman utama menampilkan daftar kontak menggunakan `ListView.builder`.
 * Setiap kontak menggunakan `ListTile`.

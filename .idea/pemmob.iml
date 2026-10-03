@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="JAVA_MODULE" version="4">
+  <component name="NewModuleRootManager" inherit-compiler-output="true">
+    <exclude-output />
+    <content url="file://$MODULE_DIR$">
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan1/praktikum1/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan1/praktikum1/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan1/praktikum1/build" />
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan1/tugas1/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan1/tugas1/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan1/tugas1/build" />
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan2/praktikum2/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan2/praktikum2/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan2/praktikum2/build" />
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan2/tugas2/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan2/tugas2/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan2/tugas2/build" />
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan3/praktikum3/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan3/praktikum3/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan3/praktikum3/build" />
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan3/tugas3/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan3/tugas3/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/pertemuan3/tugas3/build" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>
