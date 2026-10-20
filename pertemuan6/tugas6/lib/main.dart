@@ -1,125 +1,891 @@
-import 'package:flutter/material.dart';
 
-void main() {
-  runApp(const MyApp());
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final prefs = await SharedPreferences.getInstance();
+
+  final tema = PengaturanTema(
+    modeGelap: prefs.getBool('modeGelap') ?? false,
+    indeksWarna: prefs.getInt('indeksWarna') ?? 0,
+  );
+
+  runApp(Aplikasi(tema: tema));
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+// ==================== PENGATURAN TEMA ====================
 
-  // This widget is the root of your application.
+class PengaturanTema extends ChangeNotifier {
+  bool modeGelap;
+  int indeksWarna;
+
+  PengaturanTema({
+    required this.modeGelap,
+    required this.indeksWarna,
+  });
+
+  final List<Color> pilihanWarna = [
+    Colors.indigo,
+    Colors.teal,
+    Colors.deepOrange,
+  ];
+
+  Color get warnaTema => pilihanWarna[indeksWarna];
+
+  ThemeMode get themeMode =>
+      modeGelap ? ThemeMode.dark : ThemeMode.light;
+
+  Future<void> ubahMode(bool nilai) async {
+    modeGelap = nilai;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('modeGelap', nilai);
+
+    notifyListeners();
+  }
+
+  Future<void> ubahWarna(int indeks) async {
+    indeksWarna = indeks;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('indeksWarna', indeks);
+
+    notifyListeners();
+  }
+}
+
+// ==================== APLIKASI UTAMA ====================
+
+class Aplikasi extends StatelessWidget {
+  final PengaturanTema tema;
+
+  const Aplikasi({
+    super.key,
+    required this.tema,
+  });
+
+  ThemeData buatTema(Brightness brightness) {
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: tema.warnaTema,
+        brightness: brightness,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+    return AnimatedBuilder(
+      animation: tema,
+      builder: (context, child) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'Galeri Tempat Wisata',
+          theme: buatTema(Brightness.light),
+          darkTheme: buatTema(Brightness.dark),
+          themeMode: tema.themeMode,
+          initialRoute: '/',
+          onGenerateRoute: (settings) {
+            if (settings.name == '/') {
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (context) => HalamanUtama(tema: tema),
+              );
+            }
+
+            if (settings.name == '/detail') {
+              final argumen = settings.arguments;
+
+              if (argumen is TempatWisata) {
+                return PageRouteBuilder(
+                  settings: settings,
+                  pageBuilder: (context, animation, secondaryAnimation) {
+                    return HalamanDetail(item: argumen);
+                  },
+                  transitionsBuilder:
+                      (context, animation, secondaryAnimation, child) {
+                    return FadeTransition(
+                      opacity: animation,
+                      child: child,
+                    );
+                  },
+                );
+              }
+            }
+
+            return null;
+          },
+          onUnknownRoute: (settings) {
+            return MaterialPageRoute(
+              builder: (context) => const Halaman404(),
+            );
+          },
+        );
+      },
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+// ==================== DATA TEMPAT WISATA ====================
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
+class TempatWisata {
+  final String id;
+  final String nama;
+  final String lokasi;
+  final String deskripsi;
+  final IconData ikon;
 
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  const TempatWisata({
+    required this.id,
+    required this.nama,
+    required this.lokasi,
+    required this.deskripsi,
+    required this.ikon,
+  });
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+const List<TempatWisata> daftarWisata = [
+  TempatWisata(
+    id: 'bali',
+    nama: 'Pantai Bali',
+    lokasi: 'Bali, Indonesia',
+    deskripsi:
+    'Bali terkenal dengan pantainya yang indah, pemandangan '
+        'matahari terbenam, budaya yang menarik, dan suasana '
+        'liburan yang menyenangkan.',
+    ikon: Icons.beach_access,
+  ),
+  TempatWisata(
+    id: 'bromo',
+    nama: 'Gunung Bromo',
+    lokasi: 'Jawa Timur, Indonesia',
+    deskripsi:
+    'Gunung Bromo menawarkan pemandangan pegunungan, '
+        'lautan pasir, dan matahari terbit yang menjadi '
+        'daya tarik wisatawan.',
+    ikon: Icons.landscape,
+  ),
+  TempatWisata(
+    id: 'borobudur',
+    nama: 'Candi Borobudur',
+    lokasi: 'Magelang, Jawa Tengah',
+    deskripsi:
+    'Candi Borobudur merupakan destinasi wisata sejarah '
+        'dan budaya yang terkenal dengan bangunan candi '
+        'serta reliefnya.',
+    ikon: Icons.account_balance,
+  ),
+  TempatWisata(
+    id: 'rajaampat',
+    nama: 'Raja Ampat',
+    lokasi: 'Papua Barat Daya, Indonesia',
+    deskripsi:
+    'Raja Ampat dikenal dengan pulau-pulau karst, air laut '
+        'yang jernih, dan kekayaan kehidupan bawah laut.',
+    ikon: Icons.sailing,
+  ),
+];
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+// ==================== HALAMAN UTAMA ====================
+
+class HalamanUtama extends StatefulWidget {
+  final PengaturanTema tema;
+
+  const HalamanUtama({
+    super.key,
+    required this.tema,
+  });
+
+  @override
+  State<HalamanUtama> createState() => _HalamanUtamaState();
+}
+
+class _HalamanUtamaState extends State<HalamanUtama> {
+  int indeksTab = 0;
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    final judul = [
+      'Galeri Wisata',
+      'Daftar Wisata',
+      'Pengaturan',
+    ];
+
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: Text(judul[indeksTab]),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Icon(
+                    Icons.travel_explore,
+                    size: 42,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onPrimaryContainer,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Galeri Tempat Wisata',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onPrimaryContainer,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            ListTile(
+              leading: const Icon(Icons.home_outlined),
+              title: const Text('Beranda'),
+              selected: indeksTab == 0,
+              onTap: () {
+                setState(() => indeksTab = 0);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Galeri'),
+              selected: indeksTab == 1,
+              onTap: () {
+                setState(() => indeksTab = 1);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings_outlined),
+              title: const Text('Pengaturan'),
+              selected: indeksTab == 2,
+              onTap: () {
+                setState(() => indeksTab = 2);
+                Navigator.pop(context);
+              },
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      body: IndexedStack(
+        index: indeksTab,
+        children: [
+          const BerandaTab(),
+          const GaleriTab(),
+          HalamanPengaturan(tema: widget.tema),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: indeksTab,
+        onDestinationSelected: (indeks) {
+          setState(() {
+            indeksTab = indeks;
+          });
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Beranda',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.photo_library_outlined),
+            selectedIcon: Icon(Icons.photo_library),
+            label: 'Galeri',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Pengaturan',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==================== TAB BERANDA ====================
+
+class BerandaTab extends StatelessWidget {
+  const BerandaTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final warna = Theme.of(context).colorScheme;
+    final teks = Theme.of(context).textTheme;
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: warna.primaryContainer,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.explore,
+                size: 48,
+                color: warna.onPrimaryContainer,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Jelajahi Indonesia!',
+                style: teks.headlineSmall?.copyWith(
+                  color: warna.onPrimaryContainer,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Temukan tempat wisata menarik dan lihat keindahan '
+                    'berbagai destinasi Indonesia.',
+                style: teks.bodyMedium?.copyWith(
+                  color: warna.onPrimaryContainer,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Destinasi Pilihan',
+          style: teks.titleLarge,
+        ),
+        const SizedBox(height: 12),
+        ...daftarWisata.take(3).map(
+              (item) => KartuWisata(item: item),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Demo Animasi',
+          style: teks.titleLarge,
+        ),
+        const SizedBox(height: 12),
+        const DemoAnimasi(),
+      ],
+    );
+  }
+}
+
+// ==================== TAB GALERI ====================
+
+class GaleriTab extends StatelessWidget {
+  const GaleriTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text(
+          'Semua Tempat Wisata',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 12),
+        ...daftarWisata.map(
+              (item) => KartuWisata(item: item),
+        ),
+      ],
+    );
+  }
+}
+
+// ==================== KARTU WISATA ====================
+
+class KartuWisata extends StatelessWidget {
+  final TempatWisata item;
+
+  const KartuWisata({
+    super.key,
+    required this.item,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final warna = Theme.of(context).colorScheme;
+    final teks = Theme.of(context).textTheme;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      margin: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: () {
+          Navigator.pushNamed(
+            context,
+            '/detail',
+            arguments: item,
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Hero(
+                tag: 'wisata-${item.id}',
+                child: Container(
+                  width: 76,
+                  height: 76,
+                  decoration: BoxDecoration(
+                    color: warna.secondaryContainer,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    item.ikon,
+                    size: 40,
+                    color: warna.onSecondaryContainer,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.nama,
+                      style: teks.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item.lokasi,
+                      style: teks.bodyMedium?.copyWith(
+                        color: warna.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Lihat detail',
+                      style: teks.labelLarge?.copyWith(
+                        color: warna.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios, size: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== HALAMAN DETAIL ====================
+
+class HalamanDetail extends StatelessWidget {
+  final TempatWisata item;
+
+  const HalamanDetail({
+    super.key,
+    required this.item,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final warna = Theme.of(context).colorScheme;
+    final teks = Theme.of(context).textTheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Detail Wisata'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Hero(
+            tag: 'wisata-${item.id}',
+            child: Container(
+              height: 220,
+              decoration: BoxDecoration(
+                color: warna.secondaryContainer,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Icon(
+                item.ikon,
+                size: 100,
+                color: warna.onSecondaryContainer,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            item.nama,
+            style: teks.headlineMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(
+                Icons.location_on_outlined,
+                color: warna.primary,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  item.lokasi,
+                  style: teks.bodyLarge,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Tentang Tempat Ini',
+            style: teks.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            item.deskripsi,
+            style: teks.bodyLarge,
+          ),
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.arrow_back),
+            label: const Text('Kembali ke Galeri'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==================== DEMO ANIMASI ====================
+
+class DemoAnimasi extends StatefulWidget {
+  const DemoAnimasi({super.key});
+
+  @override
+  State<DemoAnimasi> createState() => _DemoAnimasiState();
+}
+
+class _DemoAnimasiState extends State<DemoAnimasi>
+    with SingleTickerProviderStateMixin {
+  bool diperbesar = false;
+  bool terlihat = true;
+
+  late final AnimationController controller;
+  late final Animation<double> rotasi;
+
+  @override
+  void initState() {
+    super.initState();
+
+    controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    );
+
+    rotasi = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(
+      CurvedAnimation(
+        parent: controller,
+        curve: Curves.easeInOut,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final warna = Theme.of(context).colorScheme;
+    final teks = Theme.of(context).textTheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeInOut,
+              width: diperbesar ? 180 : 120,
+              height: diperbesar ? 120 : 80,
+              decoration: BoxDecoration(
+                color: warna.primaryContainer,
+                borderRadius: BorderRadius.circular(
+                  diperbesar ? 32 : 12,
+                ),
+              ),
+              child: Icon(
+                Icons.landscape,
+                size: diperbesar ? 64 : 44,
+                color: warna.onPrimaryContainer,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Animasi implisit: ukuran dan bentuk',
+              style: teks.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: () {
+                setState(() {
+                  diperbesar = !diperbesar;
+                });
+              },
+              child: const Text('Ubah Ukuran'),
+            ),
+            const Divider(height: 28),
+            AnimatedOpacity(
+              opacity: terlihat ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 500),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: warna.tertiaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Pesona alam Indonesia',
+                  textAlign: TextAlign.center,
+                  style: teks.titleMedium?.copyWith(
+                    color: warna.onTertiaryContainer,
+                  ),
+                ),
+              ),
+            ),
+            OutlinedButton(
+              onPressed: () {
+                setState(() {
+                  terlihat = !terlihat;
+                });
+              },
+              child: Text(
+                terlihat ? 'Sembunyikan Kartu' : 'Tampilkan Kartu',
+              ),
+            ),
+            const Divider(height: 28),
+            RotationTransition(
+              turns: rotasi,
+              child: Icon(
+                Icons.explore,
+                size: 64,
+                color: warna.primary,
+              ),
+            ),
+            Text(
+              'Animasi eksplisit: AnimationController',
+              style: teks.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            FilledButton(
+              onPressed: () {
+                if (controller.isAnimating) {
+                  controller.stop();
+                } else {
+                  controller.forward(from: 0);
+                }
+              },
+              child: const Text('Putar Ikon'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== HALAMAN PENGATURAN ====================
+
+class HalamanPengaturan extends StatelessWidget {
+  final PengaturanTema tema;
+
+  const HalamanPengaturan({
+    super.key,
+    required this.tema,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final warna = Theme.of(context).colorScheme;
+    final teks = Theme.of(context).textTheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Pengaturan Tema'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            'Mode Tampilan',
+            style: teks.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: SwitchListTile(
+              secondary: Icon(
+                tema.modeGelap ? Icons.dark_mode : Icons.light_mode,
+              ),
+              title: const Text('Mode Gelap'),
+              subtitle: const Text(
+                'Pilihan ini tersimpan saat aplikasi ditutup.',
+              ),
+              value: tema.modeGelap,
+              onChanged: (nilai) {
+                tema.ubahMode(nilai);
+              },
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Warna Tema',
+            style: teks.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Pilih warna utama aplikasi.',
+            style: teks.bodyMedium?.copyWith(
+              color: warna.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: Column(
+              children: [
+                RadioListTile<int>(
+                  value: 0,
+                  groupValue: tema.indeksWarna,
+                  title: const Text('Indigo'),
+                  secondary: const CircleAvatar(
+                    backgroundColor: Colors.indigo,
+                  ),
+                  onChanged: (nilai) {
+                    if (nilai != null) {
+                      tema.ubahWarna(nilai);
+                    }
+                  },
+                ),
+                RadioListTile<int>(
+                  value: 1,
+                  groupValue: tema.indeksWarna,
+                  title: const Text('Teal'),
+                  secondary: const CircleAvatar(
+                    backgroundColor: Colors.teal,
+                  ),
+                  onChanged: (nilai) {
+                    if (nilai != null) {
+                      tema.ubahWarna(nilai);
+                    }
+                  },
+                ),
+                RadioListTile<int>(
+                  value: 2,
+                  groupValue: tema.indeksWarna,
+                  title: const Text('Deep Orange'),
+                  secondary: const CircleAvatar(
+                    backgroundColor: Colors.deepOrange,
+                  ),
+                    onChanged: (nilai) {
+                    if (nilai != null) {
+                      tema.ubahWarna(nilai);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          Card(
+            color: warna.primaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Tema pilihanmu disimpan menggunakan SharedPreferences.',
+                style: teks.bodyLarge?.copyWith(
+                  color: warna.onPrimaryContainer,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==================== HALAMAN 404 ====================
+
+class Halaman404 extends StatelessWidget {
+  const Halaman404({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final warna = Theme.of(context).colorScheme;
+    final teks = Theme.of(context).textTheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Halaman Tidak Ditemukan'),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 80,
+                color: warna.error,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '404 - Halaman tidak ditemukan',
+                textAlign: TextAlign.center,
+                style: teks.headlineSmall,
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () {
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    '/',
+                        (route) => false,
+                  );
+                },
+                child: const Text('Kembali ke Beranda'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
