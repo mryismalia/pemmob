@@ -1,4 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
+//const bool ujiDataKosong = false;
+const bool ujiDataKosong = true;
 
 void main() {
   runApp(const MyApp());
@@ -7,119 +13,290 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Praktikum 4',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorSchemeSeed: Colors.blue,
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const PenggunaPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+// ====================
+// MODEL PENGGUNA
+// ====================
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
+class Pengguna {
+  final int id;
+  final String name;
+  final String username;
+  final String email;
+  final String phone;
+  final String website;
+  final String kota;
 
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+  const Pengguna({
+    required this.id,
+    required this.name,
+    required this.username,
+    required this.email,
+    required this.phone,
+    required this.website,
+    required this.kota,
+  });
 
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  factory Pengguna.fromJson(Map<String, dynamic> json) {
+    return Pengguna(
+      id: json['id'] as int,
+      name: json['name'] as String,
+      username: json['username'] as String,
+      email: json['email'] as String,
+      phone: json['phone'] as String,
+      website: json['website'] as String,
+      kota: json['address']['city'] as String,
+    );
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+// ====================
+// AMBIL DATA DARI API
+// ====================
 
-  void _incrementCounter() {
+Future<List<Pengguna>> ambilPengguna() async {
+  final uri = Uri.parse(
+    'https://jsonplaceholder.typicode.com/users',
+  );
+
+  final response = await http
+      .get(uri)
+      .timeout(const Duration(seconds: 10));
+
+  if (response.statusCode != 200) {
+    throw Exception(
+      'Gagal memuat data (kode ${response.statusCode})',
+    );
+  }
+
+  final List<dynamic> data = jsonDecode(response.body);
+
+  return data
+      .map((e) => Pengguna.fromJson(e as Map<String, dynamic>))
+      .toList();
+}
+
+// ====================
+// HALAMAN DAFTAR PENGGUNA
+// ====================
+
+class PenggunaPage extends StatefulWidget {
+  const PenggunaPage({super.key});
+
+  @override
+  State<PenggunaPage> createState() => _PenggunaPageState();
+}
+
+class _PenggunaPageState extends State<PenggunaPage> {
+  late Future<List<Pengguna>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = ambilPengguna();
+  }
+
+  void _muatUlang() {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _future = ambilPengguna();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('Daftar Pengguna'),
+        actions: [
+          FutureBuilder<List<Pengguna>>(
+            future: _future,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.done &&
+                  snapshot.hasData &&
+                  !snapshot.hasError) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Center(
+                    child: Text(
+                      'Jumlah: ${snapshot.data!.length}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _muatUlang,
+          ),
+        ],
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+      body: FutureBuilder<List<Pengguna>>(
+        future: _future,
+        builder: (context, snapshot) {
+          // LOADING
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
+          // ERROR
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Colors.red,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Terjadi kesalahan:\n${snapshot.error}',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: _muatUlang,
+                      child: const Text('Coba lagi'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          // DATA KOSONG
+          // final data = <Pengguna>[];
+          final data = snapshot.data;
+
+          if (data == null || data.isEmpty) {
+            return const Center(
+              child: Text('Tidak ada data'),
+            );
+          }
+
+          // DATA TERSEDIA
+          return RefreshIndicator(
+            onRefresh: () async {
+              final request = ambilPengguna();
+
+              setState(() {
+                _future = request;
+              });
+
+              await request;
+            },
+            child: ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: data.length,
+              itemBuilder: (context, index) {
+                final pengguna = data[index];
+
+                return ListTile(
+                  leading: CircleAvatar(
+                    child: Text(
+                      pengguna.name.isNotEmpty
+                          ? pengguna.name[0]
+                          : '?',
+                    ),
+                  ),
+                  title: Text(pengguna.name),
+                  subtitle: Text(pengguna.email),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => DetailPenggunaPage(
+                          pengguna: pengguna,
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
+          );
+        },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+    );
+  }
+}
+
+// ====================
+// HALAMAN DETAIL
+// ====================
+
+class DetailPenggunaPage extends StatelessWidget {
+  final Pengguna pengguna;
+
+  const DetailPenggunaPage({
+    super.key,
+    required this.pengguna,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(pengguna.name),
+      ),
+      body: ListView(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.person),
+            title: const Text('Nama'),
+            subtitle: Text(pengguna.name),
+          ),
+          ListTile(
+            leading: const Icon(Icons.alternate_email),
+            title: const Text('Username'),
+            subtitle: Text(pengguna.username),
+          ),
+          ListTile(
+            leading: const Icon(Icons.location_city),
+            title: const Text('Kota'),
+            subtitle: Text(pengguna.kota),
+          ),
+          ListTile(
+            leading: const Icon(Icons.email),
+            title: const Text('Email'),
+            subtitle: Text(pengguna.email),
+          ),
+          ListTile(
+            leading: const Icon(Icons.phone),
+            title: const Text('Telepon'),
+            subtitle: Text(pengguna.phone),
+          ),
+          ListTile(
+            leading: const Icon(Icons.language),
+            title: const Text('Website'),
+            subtitle: Text(pengguna.website),
+          ),
+        ],
+      ),
     );
   }
 }

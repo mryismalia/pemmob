@@ -1,125 +1,629 @@
+
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite/sqflite.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
+// ==================== APLIKASI ====================
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Praktikum 5',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorSchemeSeed: Colors.blue,
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const CatatanPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+// ==================== MODEL CATATAN ====================
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
+class Catatan {
+  int? id;
+  String judul;
+  String isi;
+  String? dibuat;
 
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+  Catatan({
+    this.id,
+    required this.judul,
+    required this.isi,
+    this.dibuat,
+  });
 
-  final String title;
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'judul': judul,
+      'isi': isi,
+      'dibuat': dibuat,
+    };
+  }
 
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  factory Catatan.fromMap(Map<String, dynamic> map) {
+    return Catatan(
+      id: map['id'] as int?,
+      judul: map['judul'] as String,
+      isi: map['isi'] as String,
+      dibuat: map['dibuat'] as String?,
+    );
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+// ==================== DATABASE ====================
 
-  void _incrementCounter() {
+class DbHelper {
+  DbHelper._();
+
+  static final DbHelper instance = DbHelper._();
+
+  Database? _database;
+
+  Future<Database> get database async {
+    if (_database != null) {
+      return _database!;
+    }
+
+    final lokasi = p.join(
+      await getDatabasesPath(),
+      'catatan.db',
+    );
+
+    _database = await openDatabase(
+      lokasi,
+      version: 2,
+
+      // Membuat tabel jika database belum ada.
+      onCreate: (db, version) async {
+        await db.execute('''
+          CREATE TABLE catatan (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            judul TEXT NOT NULL,
+            isi TEXT NOT NULL,
+            dibuat TEXT
+          )
+        ''');
+      },
+
+      // Memperbarui database versi lama.
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          final kolom = await db.rawQuery(
+            'PRAGMA table_info(catatan)',
+          );
+
+          final sudahAda = kolom.any(
+                (item) => item['name'] == 'dibuat',
+          );
+
+          if (!sudahAda) {
+            await db.execute(
+              'ALTER TABLE catatan ADD COLUMN dibuat TEXT',
+            );
+          }
+        }
+      },
+    );
+
+    return _database!;
+  }
+
+  // Menampilkan dan mencari catatan.
+  Future<List<Catatan>> semua({
+    String kata = '',
+    String urutan = 'DESC',
+  }) async {
+    final db = await database;
+
+    final hasil = await db.query(
+      'catatan',
+      where: 'judul LIKE ?',
+      whereArgs: ['%$kata%'],
+      orderBy: 'dibuat $urutan',
+    );
+
+    return hasil.map((data) => Catatan.fromMap(data)).toList();
+  }
+
+  // Menambahkan catatan.
+  Future<int> tambah(Catatan catatan) async {
+    final db = await database;
+
+    return db.insert(
+      'catatan',
+      {
+        'judul': catatan.judul,
+        'isi': catatan.isi,
+        'dibuat': DateTime.now().toIso8601String(),
+      },
+    );
+  }
+
+  // Mengubah catatan.
+  Future<int> ubah(Catatan catatan) async {
+    final db = await database;
+
+    return db.update(
+      'catatan',
+      {
+        'judul': catatan.judul,
+        'isi': catatan.isi,
+      },
+      where: 'id = ?',
+      whereArgs: [catatan.id],
+    );
+  }
+
+  // Menghapus catatan.
+  Future<int> hapus(int id) async {
+    final db = await database;
+
+    return db.delete(
+      'catatan',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+}
+
+// ==================== HALAMAN CATATAN ====================
+
+class CatatanPage extends StatefulWidget {
+  const CatatanPage({super.key});
+
+  @override
+  State<CatatanPage> createState() => _CatatanPageState();
+}
+
+class _CatatanPageState extends State<CatatanPage> {
+  final TextEditingController _cariController =
+  TextEditingController();
+
+  String _kata = '';
+  String _urutan = 'DESC';
+
+  @override
+  void initState() {
+    super.initState();
+    _muatUrutan();
+  }
+
+  @override
+  void dispose() {
+    _cariController.dispose();
+    super.dispose();
+  }
+
+  // Mengambil pilihan urutan yang tersimpan.
+  Future<void> _muatUrutan() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (!mounted) return;
+
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _urutan = prefs.getString('urutanCatatan') ?? 'DESC';
     });
+  }
+
+  // Menyimpan pilihan urutan.
+  Future<void> _simpanUrutan(String nilai) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.setString('urutanCatatan', nilai);
+
+    if (!mounted) return;
+
+    setState(() {
+      _urutan = nilai;
+    });
+  }
+
+  // Dialog konfirmasi sebelum menghapus.
+  Future<void> _konfirmasiHapus(int id) async {
+    final yakin = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Konfirmasi'),
+          content: const Text('Hapus catatan ini?'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, false);
+              },
+              child: const Text('Batal'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text('Hapus'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (yakin == true) {
+      await DbHelper.instance.hapus(id);
+
+      if (!mounted) return;
+
+      setState(() {});
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Catatan berhasil dihapus'),
+        ),
+      );
+    }
+  }
+
+  // Membuka halaman tambah atau edit.
+  Future<void> _bukaForm([Catatan? catatan]) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) {
+          return FormCatatanPage(catatan: catatan);
+        },
+      ),
+    );
+
+    if (!mounted) return;
+
+    setState(() {});
+  }
+
+  // Mengubah format tanggal.
+  String _formatTanggal(String? tanggal) {
+    if (tanggal == null || tanggal.isEmpty) {
+      return 'Tanggal tidak tersedia';
+    }
+
+    final waktu = DateTime.tryParse(tanggal);
+
+    if (waktu == null) {
+      return 'Tanggal tidak tersedia';
+    }
+
+    final hari = waktu.day.toString().padLeft(2, '0');
+    final bulan = waktu.month.toString().padLeft(2, '0');
+    final jam = waktu.hour.toString().padLeft(2, '0');
+    final menit = waktu.minute.toString().padLeft(2, '0');
+
+    return '$hari/$bulan/${waktu.year} $jam:$menit';
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('Daftar Catatan'),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      body: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+          children: [
+            // Kolom pencarian judul.
+            TextField(
+              controller: _cariController,
+              decoration: InputDecoration(
+                labelText: 'Cari judul catatan',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    _cariController.clear();
+
+                    setState(() {
+                      _kata = '';
+                    });
+                  },
+                ),
+                border: const OutlineInputBorder(),
+              ),
+              onChanged: (nilai) {
+                setState(() {
+                  _kata = nilai;
+                });
+              },
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+
+            const SizedBox(height: 12),
+
+            // Pilihan urutan terbaru atau terlama.
+            DropdownButtonFormField<String>(
+              initialValue: _urutan,
+              decoration: const InputDecoration(
+                labelText: 'Urutan catatan',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'DESC',
+                  child: Text('Terbaru'),
+                ),
+                DropdownMenuItem(
+                  value: 'ASC',
+                  child: Text('Terlama'),
+                ),
+              ],
+              onChanged: (nilai) {
+                if (nilai != null) {
+                  _simpanUrutan(nilai);
+                }
+              },
+            ),
+
+            const SizedBox(height: 12),
+
+            // Daftar catatan.
+            Expanded(
+              child: FutureBuilder<List<Catatan>>(
+                future: DbHelper.instance.semua(
+                  kata: _kata,
+                  urutan: _urutan,
+                ),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState ==
+                      ConnectionState.waiting) {
+                    return const Center(
+                      child: CircularProgressIndicator(),
+                    );
+                  }
+
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text(
+                        'Terjadi kesalahan: ${snapshot.error}',
+                      ),
+                    );
+                  }
+
+                  final daftar = snapshot.data ?? [];
+
+                  if (daftar.isEmpty) {
+                    return const Center(
+                      child: Text('Belum ada catatan'),
+                    );
+                  }
+
+                  return ListView.builder(
+                    itemCount: daftar.length,
+                    itemBuilder: (context, index) {
+                      final item = daftar[index];
+
+                      return Card(
+                        child: ListTile(
+                          title: Text(
+                            item.judul,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment:
+                            CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 4),
+                              Text(item.isi),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Dibuat: ${_formatTanggal(item.dibuat)}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                          isThreeLine: true,
+                          onTap: () {
+                            _bukaForm(item);
+                          },
+                          trailing: IconButton(
+                            icon: const Icon(
+                              Icons.delete,
+                              color: Colors.red,
+                            ),
+                            onPressed: () {
+                              _konfirmasiHapus(item.id!);
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
+        onPressed: () {
+          _bukaForm();
+        },
         child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      ),
+    );
+  }
+}
+
+// ==================== FORM TAMBAH DAN EDIT ====================
+
+class FormCatatanPage extends StatefulWidget {
+  final Catatan? catatan;
+
+  const FormCatatanPage({
+    super.key,
+    this.catatan,
+  });
+
+  @override
+  State<FormCatatanPage> createState() => _FormCatatanPageState();
+}
+
+class _FormCatatanPageState extends State<FormCatatanPage> {
+  final _formKey = GlobalKey<FormState>();
+
+  final TextEditingController _judulController =
+  TextEditingController();
+
+  final TextEditingController _isiController =
+  TextEditingController();
+
+  bool _menyimpan = false;
+
+  bool get _sedangEdit => widget.catatan != null;
+
+  @override
+  void initState() {
+    super.initState();
+
+    if (_sedangEdit) {
+      _judulController.text = widget.catatan!.judul;
+      _isiController.text = widget.catatan!.isi;
+    }
+  }
+
+  @override
+  void dispose() {
+    _judulController.dispose();
+    _isiController.dispose();
+    super.dispose();
+  }
+
+  // Menyimpan catatan baru atau perubahan.
+  Future<void> _simpan() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() {
+      _menyimpan = true;
+    });
+
+    try {
+      final catatan = Catatan(
+        id: widget.catatan?.id,
+        judul: _judulController.text.trim(),
+        isi: _isiController.text.trim(),
+        dibuat: widget.catatan?.dibuat,
+      );
+
+      if (_sedangEdit) {
+        await DbHelper.instance.ubah(catatan);
+      } else {
+        await DbHelper.instance.tambah(catatan);
+      }
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _sedangEdit
+                ? 'Catatan berhasil diubah'
+                : 'Catatan berhasil ditambahkan',
+          ),
+        ),
+      );
+
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal menyimpan catatan: $e'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _menyimpan = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          _sedangEdit ? 'Edit Catatan' : 'Tambah Catatan',
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              TextFormField(
+                controller: _judulController,
+                decoration: const InputDecoration(
+                  labelText: 'Judul',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (nilai) {
+                  if (nilai == null || nilai.trim().isEmpty) {
+                    return 'Judul wajib diisi';
+                  }
+
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 16),
+
+              TextFormField(
+                controller: _isiController,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: 'Isi catatan',
+                  alignLabelWithHint: true,
+                  border: OutlineInputBorder(),
+                ),
+                validator: (nilai) {
+                  if (nilai == null || nilai.trim().isEmpty) {
+                    return 'Isi catatan wajib diisi';
+                  }
+
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 20),
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _menyimpan ? null : _simpan,
+                  child: _menyimpan
+                      ? const CircularProgressIndicator()
+                      : Text(
+                    _sedangEdit
+                        ? 'Simpan Perubahan'
+                        : 'Simpan Catatan',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
